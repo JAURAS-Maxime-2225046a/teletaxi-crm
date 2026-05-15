@@ -1,0 +1,41 @@
+# Node
+node_modules/
+.next/
+out/
+*.log
+
+# Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Tauri
+src-tauri/binaries/
+src-tauri/resources/jre/
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build artefacts
+*.dmg
+*.msi
+*.app
+
+# Secrets
+.env
+.env.local
+*.p12
+*.cer
