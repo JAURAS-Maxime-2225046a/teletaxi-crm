@@ -54,7 +54,7 @@
     },
     "windows": {
       "wix": {
-        "language": ["fr-FR", "en-US"]
+        "language": ["fr-FR"]
       }
     }
   }

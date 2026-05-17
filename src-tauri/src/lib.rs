@@ -46,6 +46,7 @@ pub fn run() {
             commands::sidecar::test_connection,
             commands::sidecar::start_import,
             commands::sidecar::preview_excel,
+            commands::sidecar::get_sidecar_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application")

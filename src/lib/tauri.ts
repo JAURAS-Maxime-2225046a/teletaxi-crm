@@ -30,6 +30,8 @@ export const tauri = {
         "test_connection",
         { accdbPath }
       ),
+    getLog: () =>
+      invoke<{ path: string | null; content: string; exists: boolean }>("get_sidecar_log"),
   },
 
   history: {

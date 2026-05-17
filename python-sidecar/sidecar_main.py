@@ -55,6 +55,12 @@ def _get_log_dir() -> Path:
     return base
 
 
+def _check_laccdb_lock(accdb_path: str) -> bool:
+    """Retourne True si un .laccdb existe à côté du .accdb (base verrouillée par TeleTaxi)."""
+    lock = Path(accdb_path).with_suffix(".laccdb")
+    return lock.exists()
+
+
 # Configurer le logging AVANT tout import teletaxi_import.
 # Le logger "teletaxi" utilise sys.stdout par défaut (voir logger.py).
 # On force stderr ici pour ne pas polluer le canal JSON stdout.
@@ -135,6 +141,14 @@ def handle_test_connection(request_id: str, params: dict) -> None:
     accdb_path = params.get("accdb_path")
     if not accdb_path:
         write_error(request_id, "MISSING_PARAM", "accdb_path requis")
+        return
+
+    if _check_laccdb_lock(accdb_path):
+        write_error(
+            request_id,
+            "DB_LOCKED",
+            "La base est verrouillée — fermez TeleTaxi puis réessayez.",
+        )
         return
 
     try:
@@ -378,4 +392,33 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Marqueur de démarrage : si cette ligne apparaît dans sidecar.log,
+    # Python a bien tourné (exclut les crash DLL/OS Windows).
+    print(
+        f"[sidecar] start frozen={_IS_FROZEN} python={sys.version.split()[0]}",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        sys.exit(main())
+    except Exception as e:
+        # Filet de sécurité : si main() plante avant d'écrire quoi que ce soit,
+        # on émet quand même un JSON lisible par Tauri.
+        try:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "id": "startup",
+                        "type": "error",
+                        "code": "STARTUP_CRASH",
+                        "message": str(e),
+                        "details": traceback.format_exc(),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            sys.stdout.flush()
+        except Exception:
+            pass
+        sys.exit(1)

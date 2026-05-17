@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Car, Database, FolderOpen, CheckCircle2, AlertCircle, Loader2,
+  Car, Database, FolderOpen, CheckCircle2, Loader2,
   HardDrive, Calendar, FileText, RefreshCw, Lock, ChevronRight,
-  Info, ShieldCheck, X,
+  Info, ShieldCheck, X, ChevronDown,
 } from "lucide-react";
 import { tauri } from "@/lib/tauri";
 import { useAuth } from "@/contexts/auth-context";
@@ -14,6 +14,12 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type DbState = "empty" | "verifying" | "connected" | "error";
+
+function parseErrorCode(msg: string): { code: string; detail: string } {
+  const match = msg.match(/^([A-Z_]+):\s*([\s\S]*)/);
+  if (match) return { code: match[1], detail: match[2] };
+  return { code: "", detail: msg };
+}
 
 type DbInfo = {
   connected: boolean;
@@ -259,48 +265,186 @@ export default function DatabasePage() {
           )}
 
           {/* État erreur */}
-          {dbState === "error" && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-red-200 dark:border-red-900 shadow-sm overflow-hidden">
-              <div className="bg-red-50/50 dark:bg-red-950/20 border-b border-red-100 dark:border-red-900 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
-                    <Lock className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-red-900 dark:text-red-300">Connexion échouée</p>
-                    <p className="text-xs text-red-700 dark:text-red-400 truncate max-w-xs">{errorMsg || "Erreur inconnue"}</p>
-                  </div>
-                </div>
-                <button onClick={handleReset} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-6 space-y-4">
-                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                  Impossible de se connecter au fichier. Si TeleTaxi est ouvert, fermez-le et réessayez.
+          {dbState === "error" && <ErrorPanel errorMsg={errorMsg} onRetry={handleRetry} onReset={handleReset} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function ErrorPanel({
+  errorMsg,
+  onRetry,
+  onReset,
+}: {
+  errorMsg: string;
+  onRetry: () => void;
+  onReset: () => void;
+}) {
+  const { code, detail } = parseErrorCode(errorMsg);
+  const [logExpanded, setLogExpanded] = useState(false);
+  const [logData, setLogData] = useState<{ path: string | null; content: string; exists: boolean } | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+
+  const loadLog = useCallback(async () => {
+    if (logData) return;
+    setLogLoading(true);
+    try {
+      const data = await tauri.sidecar.getLog();
+      setLogData(data);
+    } catch {
+      setLogData({ path: null, content: "", exists: false });
+    } finally {
+      setLogLoading(false);
+    }
+  }, [logData]);
+
+  const handleToggleLog = () => {
+    if (!logExpanded) loadLog();
+    setLogExpanded((v) => !v);
+  };
+
+  const copyDiag = async () => {
+    const lines = [
+      `Code erreur : ${code || "(aucun)"}`,
+      `Message : ${detail}`,
+      "",
+      `Log sidecar :`,
+      logData?.content || "(non chargé)",
+    ];
+    await navigator.clipboard.writeText(lines.join("\n"));
+    toast.success("Infos de diagnostic copiées");
+  };
+
+  const guidance: { title: string; steps: string[] } = (() => {
+    switch (code) {
+      case "DB_LOCKED":
+        return {
+          title: "TeleTaxi est ouvert — fermez-le puis réessayez.",
+          steps: [
+            "Fermez complètement le logiciel TeleTaxi",
+            "Attendez quelques secondes",
+            'Cliquez sur "Réessayer" ci-dessous',
+          ],
+        };
+      case "ACCESS_DRIVER_MISSING":
+        return {
+          title: "Le pilote Microsoft Access Database Engine est manquant.",
+          steps: [
+            "Téléchargez le pilote sur le site Microsoft (même bitness que l'app)",
+            "Installez-le puis redémarrez l'application",
+          ],
+        };
+      case "STARTUP_CRASH":
+        return {
+          title: "Le sidecar a planté au démarrage.",
+          steps: [
+            "Copiez le message d'erreur ci-dessus",
+            "Contactez le support TeleTaxi CRM avec ce message",
+          ],
+        };
+      default:
+        return {
+          title: "Impossible de se connecter au fichier. Si TeleTaxi est ouvert, fermez-le et réessayez.",
+          steps: [
+            "Fermez complètement le logiciel TeleTaxi",
+            "Attendez quelques secondes",
+            'Cliquez sur "Réessayer" ci-dessous',
+          ],
+        };
+    }
+  })();
+
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-red-200 dark:border-red-900 shadow-sm overflow-hidden">
+      <div className="bg-red-50/50 dark:bg-red-950/20 border-b border-red-100 dark:border-red-900 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center">
+            <Lock className="w-5 h-5 text-red-600 dark:text-red-400" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-red-900 dark:text-red-300">Connexion échouée</p>
+            <p className="text-xs text-red-700 dark:text-red-400 truncate max-w-xs">{detail || "Erreur inconnue"}</p>
+          </div>
+        </div>
+        <button
+          onClick={onReset}
+          className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="p-6 space-y-4">
+        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{guidance.title}</p>
+        <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
+          <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Pour continuer :</p>
+          <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 list-decimal list-inside">
+            {guidance.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </div>
+        {/* Section rapport technique dépliable */}
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+          <button
+            onClick={handleToggleLog}
+            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Info className="w-3.5 h-3.5" />
+              Rapport technique (support)
+            </span>
+            <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", logExpanded && "rotate-180")} />
+          </button>
+          {logExpanded && (
+            <div className="border-t border-slate-200 dark:border-slate-700 p-4 space-y-3 bg-slate-50 dark:bg-slate-800/50">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Code erreur</p>
+                <p className="text-xs font-mono text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 rounded px-2 py-1 border border-slate-200 dark:border-slate-700">
+                  {code || "(aucun)"}
                 </p>
-                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4">
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">Pour continuer :</p>
-                  <ol className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 list-decimal list-inside">
-                    <li>Fermez complètement le logiciel TeleTaxi</li>
-                    <li>Attendez quelques secondes</li>
-                    <li>Cliquez sur &quot;Réessayer&quot; ci-dessous</li>
-                  </ol>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleRetry} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-                    <RefreshCw className="w-4 h-4" />
-                    Réessayer
-                  </button>
-                  <button onClick={handleReset} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-                    Choisir un autre fichier
-                  </button>
-                </div>
               </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Log sidecar{logData?.path ? <span className="font-normal ml-1 text-slate-400 dark:text-slate-500 truncate">— {logData.path}</span> : ""}
+                </p>
+                {logLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Chargement…
+                  </div>
+                ) : (
+                  <pre className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-2 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono">
+                    {logData?.content?.trim() || "(aucun log enregistré)"}
+                  </pre>
+                )}
+              </div>
+              <button
+                onClick={copyDiag}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Copier pour le support
+              </button>
             </div>
           )}
         </div>
-      </main>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onRetry}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Réessayer
+          </button>
+          <button
+            onClick={onReset}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            Choisir un autre fichier
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

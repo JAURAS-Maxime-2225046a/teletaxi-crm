@@ -1,8 +1,27 @@
+use std::io::Write as _;
+
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 use crate::sidecar::protocol::{SidecarMessage, SidecarRequest};
+
+// ─── Log sidecar stderr ───────────────────────────────────────────────────────
+
+fn log_sidecar_stderr(app: &AppHandle, line: &str) {
+    eprintln!("[sidecar stderr] {line}");
+    if let Ok(log_dir) = app.path().app_log_dir() {
+        let _ = std::fs::create_dir_all(&log_dir);
+        let log_path = log_dir.join("sidecar.log");
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
 
 // ─── JAVA_HOME detection ──────────────────────────────────────────────────────
 
@@ -113,9 +132,15 @@ pub async fn sidecar_call(
                             return Ok(msg.data.unwrap_or(Value::Null));
                         }
                         "error" => {
-                            let err = msg
+                            let message = msg
                                 .message
                                 .unwrap_or_else(|| "Erreur sidecar inconnue".to_string());
+                            let err = match msg.code.as_deref() {
+                                Some(code) if !code.is_empty() => {
+                                    format!("{code}: {message}")
+                                }
+                                _ => message,
+                            };
                             let _ = child.kill();
                             return Err(err);
                         }
@@ -125,14 +150,21 @@ pub async fn sidecar_call(
                 }
             }
             Some(CommandEvent::Stderr(bytes)) => {
-                eprintln!("[sidecar stderr] {}", String::from_utf8_lossy(&bytes));
+                log_sidecar_stderr(app, &String::from_utf8_lossy(&bytes));
             }
             Some(CommandEvent::Error(e)) => {
                 let _ = child.kill();
                 return Err(format!("Erreur process sidecar : {e}"));
             }
-            Some(CommandEvent::Terminated(_)) | None => {
-                return Err("Sidecar terminé sans réponse".to_string());
+            Some(CommandEvent::Terminated(payload)) => {
+                let code_info = payload
+                    .code
+                    .map(|c| format!(" (code {c})"))
+                    .unwrap_or_default();
+                return Err(format!("Sidecar terminé sans réponse{code_info}"));
+            }
+            None => {
+                return Err("Canal sidecar fermé sans réponse".to_string());
             }
             Some(_) => {}
         }
@@ -188,9 +220,15 @@ pub async fn sidecar_stream(
                         }
                         "error" => {
                             let _ = app.emit("import:error", &msg);
-                            let err = msg
+                            let message = msg
                                 .message
                                 .unwrap_or_else(|| "Erreur import".to_string());
+                            let err = match msg.code.as_deref() {
+                                Some(code) if !code.is_empty() => {
+                                    format!("{code}: {message}")
+                                }
+                                _ => message,
+                            };
                             let _ = child.kill();
                             return Err(err);
                         }
@@ -200,19 +238,25 @@ pub async fn sidecar_stream(
                 }
             }
             Some(CommandEvent::Stderr(bytes)) => {
-                eprintln!("[sidecar stderr] {}", String::from_utf8_lossy(&bytes));
+                log_sidecar_stderr(&app, &String::from_utf8_lossy(&bytes));
             }
             Some(CommandEvent::Error(e)) => {
                 let _ = app.emit("import:error", serde_json::json!({"message": e}));
                 let _ = child.kill();
                 return Err(e);
             }
-            Some(CommandEvent::Terminated(_)) | None => {
-                let _ = app.emit(
-                    "import:error",
-                    serde_json::json!({"message": "Sidecar terminé prématurément"}),
-                );
-                return Err("Sidecar terminé sans résultat".to_string());
+            Some(CommandEvent::Terminated(payload)) => {
+                let msg = payload
+                    .code
+                    .map(|c| format!("Sidecar terminé prématurément (code {c})"))
+                    .unwrap_or_else(|| "Sidecar terminé prématurément".to_string());
+                let _ = app.emit("import:error", serde_json::json!({"message": msg}));
+                return Err(msg);
+            }
+            None => {
+                let msg = "Canal sidecar fermé sans résultat".to_string();
+                let _ = app.emit("import:error", serde_json::json!({"message": msg}));
+                return Err(msg);
             }
             Some(_) => {}
         }

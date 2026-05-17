@@ -1,6 +1,6 @@
 use chrono::Utc;
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::db::queries;
 use crate::sidecar::process::{sidecar_call, sidecar_stream};
@@ -112,4 +112,22 @@ pub async fn preview_excel(
         }),
     )
     .await
+}
+
+/// Retourne le contenu du fichier sidecar.log pour affichage dans l'UI.
+#[tauri::command]
+pub fn get_sidecar_log(app: AppHandle) -> Value {
+    let log_dir = match app.path().app_log_dir() {
+        Ok(d) => d,
+        Err(_) => return serde_json::json!({ "path": null, "content": "", "exists": false }),
+    };
+    let log_path = log_dir.join("sidecar.log");
+    let exists = log_path.exists();
+    let path_str = log_path.to_string_lossy().into_owned();
+    let content = if exists {
+        std::fs::read_to_string(&log_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    serde_json::json!({ "path": path_str, "content": content, "exists": exists })
 }
