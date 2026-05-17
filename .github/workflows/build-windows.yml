@@ -1,0 +1,130 @@
+name: Build Windows (.msi)
+
+# Déclenché sur un tag de release (ex : v0.1.0) ou manuellement
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# ─── Permissions minimales ────────────────────────────────────────────────────
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    # Répertoire de travail par défaut pour tous les steps "run"
+    defaults:
+      run:
+        working-directory: teletaxi-crm
+
+    steps:
+      # ── Sources ─────────────────────────────────────────────────────────────
+      - name: Checkout teletaxi-crm
+        uses: actions/checkout@v4
+        with:
+          path: teletaxi-crm
+
+      # teletaxi_import est un dépôt Python séparé. Le spec PyInstaller le
+      # cherche à PROJECT_ROOT/../teletaxi_import (voisin dans le workspace).
+      #
+      # Configurer la variable de dépôt dans GitHub :
+      #   Settings → Variables → Repository → TELETAXI_IMPORT_REPO = owner/teletaxi_import
+      #
+      # Si le dépôt est privé, ajouter aussi :
+      #   Settings → Secrets → Repository → TELETAXI_IMPORT_TOKEN = <PAT scope "repo">
+      # et remplacer `github.token` par `secrets.TELETAXI_IMPORT_TOKEN` ci-dessous.
+      - name: Checkout teletaxi_import
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.TELETAXI_IMPORT_REPO }}
+          token: ${{ github.token }}
+          path: teletaxi_import
+
+      # ── Runtimes ────────────────────────────────────────────────────────────
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: teletaxi-crm/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # ── Caches ──────────────────────────────────────────────────────────────
+      - name: Cache Rust (src-tauri)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: teletaxi-crm/src-tauri -> target
+
+      # ── Sidecar Python ──────────────────────────────────────────────────────
+      - name: Install Python deps
+        working-directory: teletaxi-crm/python-sidecar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build sidecar Python (Windows x64)
+        working-directory: teletaxi-crm/python-sidecar
+        shell: pwsh
+        run: .\build_sidecar.ps1
+
+      - name: Verify sidecar binary
+        shell: pwsh
+        run: |
+          $bin = "src-tauri\binaries\teletaxi-import-x86_64-pc-windows-msvc.exe"
+          if (-not (Test-Path $bin)) {
+            Write-Error "Sidecar manquant : $bin"
+            exit 1
+          }
+          $sizeMb = ((Get-Item $bin).Length / 1MB).ToString("F1")
+          Write-Host "✓ Sidecar OK : $bin ($sizeMb Mo)"
+
+      # ── JRE Temurin 17 (Windows x64) ────────────────────────────────────────
+      - name: Download JRE Temurin 17
+        shell: pwsh
+        run: .\scripts\download_jre.ps1
+
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - name: Install Node deps
+        run: pnpm install --frozen-lockfile
+
+      # ── Build Tauri ─────────────────────────────────────────────────────────
+      - name: Build Tauri (.msi)
+        run: pnpm tauri build
+        env:
+          # Désactive la compilation incrémentale pour éviter les conflits de cache
+          CARGO_INCREMENTAL: "0"
+
+      # ── Artifact ────────────────────────────────────────────────────────────
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: TELETAXI-CRM-${{ github.ref_name }}-windows-x64
+          path: teletaxi-crm/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 30
+
+      # (Optionnel) Créer une release GitHub et y attacher le MSI
+      # Nécessite permissions: contents: write dans le job
+      # - name: Create GitHub Release
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     files: teletaxi-crm/src-tauri/target/release/bundle/msi/*.msi

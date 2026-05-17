@@ -34,6 +34,9 @@ Thumbs.db
 *.msi
 *.app
 
+# Claude Code
+memory/
+
 # Secrets
 .env
 .env.local

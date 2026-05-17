@@ -1,0 +1,12 @@
+# Dépendances du sidecar Python TELETAXI CRM
+# Ces versions correspondent au venv de teletaxi_import/.venv
+# (Python 3.12.x, Mac arm64)
+
+JayDeBeApi==1.2.3
+jpype1==1.5.2
+openpyxl==3.1.5
+pydantic==2.10.4
+pydantic_core==2.27.2
+annotated-types==0.7.0
+et_xmlfile==2.0.0
+typing_extensions==4.15.0

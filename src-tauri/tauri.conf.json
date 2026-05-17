@@ -30,7 +30,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["dmg", "msi"],
+    "externalBin": [
+      "binaries/teletaxi-import"
+    ],
+    "resources": [
+      "resources/**/*"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,9 +46,16 @@
     ],
     "category": "Business",
     "shortDescription": "Import Excel vers TELETAXI",
+    "longDescription": "Outil d'import automatisé de fichiers Excel vers la base de données TELETAXI (data.accdb). Multi-OS, RGPD-compliant.",
     "copyright": "© 2026 Maxime Jauras",
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
+    },
+    "windows": {
+      "wix": {
+        "language": ["fr-FR", "en-US"]
+      }
     }
   }
 }
