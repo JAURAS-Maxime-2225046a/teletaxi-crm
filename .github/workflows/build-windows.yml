@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.TELETAXI_IMPORT_REPO }}
-          token: ${{ github.token }}
+          token: ${{ secrets.TELETAXI_IMPORT_TOKEN }}
           path: teletaxi_import
 
       # ── Runtimes ────────────────────────────────────────────────────────────
