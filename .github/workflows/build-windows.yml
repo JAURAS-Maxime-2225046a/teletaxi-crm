@@ -113,10 +113,13 @@ jobs:
           CARGO_INCREMENTAL: "0"
 
       # ── Artifact ────────────────────────────────────────────────────────────
+      - name: Sanitize ref name
+        run: echo "SAFE_REF=$(echo '${{ github.ref_name }}' | sed 's|/|-|g')" >> $GITHUB_ENV
+
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: TELETAXI-CRM-${{ github.ref_name }}-windows-x64
+          name: TELETAXI-CRM-${{ env.SAFE_REF }}-windows-x64
           path: teletaxi-crm/src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
           retention-days: 30
