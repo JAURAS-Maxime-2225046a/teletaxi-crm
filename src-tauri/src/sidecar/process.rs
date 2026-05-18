@@ -157,11 +157,8 @@ pub async fn sidecar_call(
                 return Err(format!("Erreur process sidecar : {e}"));
             }
             Some(CommandEvent::Terminated(payload)) => {
-                let code_info = payload
-                    .code
-                    .map(|c| format!(" (code {c})"))
-                    .unwrap_or_default();
-                return Err(format!("Sidecar terminé sans réponse{code_info}"));
+                let code = payload.code.unwrap_or(-1);
+                return Err(format!("SIDECAR_CRASH: Sidecar terminé sans réponse (code {code})"));
             }
             None => {
                 return Err("Canal sidecar fermé sans réponse".to_string());
