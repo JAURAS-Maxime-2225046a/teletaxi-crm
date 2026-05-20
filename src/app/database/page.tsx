@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Car, Database, FolderOpen, CheckCircle2, Loader2,
   HardDrive, Calendar, FileText, RefreshCw, Lock, ChevronRight,
-  Info, ShieldCheck, X, ChevronDown,
+  Info, ShieldCheck, X, ChevronDown, Copy,
 } from "lucide-react";
 import { tauri } from "@/lib/tauri";
 import { useAuth } from "@/contexts/auth-context";
@@ -312,6 +312,7 @@ function ErrorPanel({
     java_home: string | null;
   } | null>(null);
   const [logLoading, setLogLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const loadLog = useCallback(async () => {
     if (logData) return;
@@ -340,19 +341,36 @@ function ErrorPanel({
   const exitCodeMatch = detail.match(/code\s+(-?\d+)/i);
   const exitCode = exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : null;
 
+  const buildDiagText = (ld: typeof logData) => [
+    `Code erreur : ${code || "(aucun)"}`,
+    `Message : ${detail}`,
+    exitCode !== null ? `Code sortie Windows : ${interpretExitCode(exitCode)}` : null,
+    ld?.java_home ? `Java détecté : ${ld.java_home}` : "Java : INTROUVABLE",
+    "",
+    `Log sidecar (${ld?.path ?? "?"}) :`,
+    ld?.content?.trim() || "(vide)",
+  ].filter(Boolean).join("\n");
+
+  const handleCopyError = async () => {
+    let ld = logData;
+    if (!ld) {
+      setLogLoading(true);
+      try {
+        ld = await tauri.sidecar.getLog();
+        setLogData(ld);
+      } catch {
+        ld = { path: null, content: "", exists: false, java_home: null };
+      } finally {
+        setLogLoading(false);
+      }
+    }
+    await navigator.clipboard.writeText(buildDiagText(ld));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const copyDiag = async () => {
-    const lines = [
-      `Code erreur : ${code || "(aucun)"}`,
-      `Message : ${detail}`,
-      exitCode !== null ? `Code sortie Windows : ${interpretExitCode(exitCode)}` : null,
-      logData?.java_home ? `Java détecté : ${logData.java_home}` : "Java : INTROUVABLE",
-      "",
-      `Log sidecar (${logData?.path ?? "?"}) :`,
-      logData?.content?.trim() || "(vide)",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    await navigator.clipboard.writeText(lines);
+    await navigator.clipboard.writeText(buildDiagText(logData));
     toast.success("Infos de diagnostic copiées");
   };
 
@@ -513,13 +531,20 @@ function ErrorPanel({
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={onRetry}
             className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Réessayer
+          </button>
+          <button
+            onClick={handleCopyError}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+            {copied ? "Copié ✓" : "Copier l'erreur"}
           </button>
           <button
             onClick={onReset}

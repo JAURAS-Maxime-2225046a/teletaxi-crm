@@ -18,7 +18,7 @@ fn log_sidecar_stderr(app: &AppHandle, line: &str) {
             .append(true)
             .open(&log_path)
         {
-            let _ = writeln!(f, "{line}");
+            let _ = writeln!(f, "[stderr] {line}");
         }
     }
 }
