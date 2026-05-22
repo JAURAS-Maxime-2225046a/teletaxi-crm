@@ -153,9 +153,8 @@ def handle_test_connection(request_id: str, params: dict) -> None:
         return
 
     try:
-        print("[sidecar] resolving JRE path...", file=sys.stderr, flush=True)
         lib_dir = _get_lib_dir()
-        print(f"[sidecar] JRE path resolved: {lib_dir}", file=sys.stderr, flush=True)
+        print(f"[sidecar] lib_dir (UCanAccess JARs): {lib_dir}", file=sys.stderr, flush=True)
 
         print("[sidecar] importing teletaxi_import...", file=sys.stderr, flush=True)
         from teletaxi_import.config import AppConfig
