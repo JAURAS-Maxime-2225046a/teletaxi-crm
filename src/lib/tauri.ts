@@ -31,7 +31,7 @@ export const tauri = {
         { accdbPath }
       ),
     getLog: () =>
-      invoke<{ path: string | null; content: string; exists: boolean }>("get_sidecar_log"),
+      invoke<{ path: string | null; content: string; exists: boolean; java_home: string | null }>("get_sidecar_log"),
   },
 
   history: {

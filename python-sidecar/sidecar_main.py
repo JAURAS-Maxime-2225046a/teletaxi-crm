@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -152,16 +153,25 @@ def handle_test_connection(request_id: str, params: dict) -> None:
         return
 
     try:
+        lib_dir = _get_lib_dir()
+        print(f"[sidecar] lib_dir (UCanAccess JARs): {lib_dir}", file=sys.stderr, flush=True)
+
+        print("[sidecar] importing teletaxi_import...", file=sys.stderr, flush=True)
         from teletaxi_import.config import AppConfig
         from teletaxi_import.database.connection import AccessConnection
+        print("[sidecar] teletaxi_import imported", file=sys.stderr, flush=True)
 
         config = AppConfig.from_env(
             accdb_path=accdb_path,
             excel_path="/tmp/dummy_sidecar",
-            lib_dir=_get_lib_dir(),
+            lib_dir=lib_dir,
         )
+        print(f"[sidecar] accdb_path={config.accdb_path}", file=sys.stderr, flush=True)
+        print(f"[sidecar] classpath={config.classpath}", file=sys.stderr, flush=True)
 
+        print(f"[sidecar] connecting to {accdb_path}...", file=sys.stderr, flush=True)
         with AccessConnection(config, read_only=True) as conn:
+            print("[sidecar] connection established, listing tables...", file=sys.stderr, flush=True)
             tables = conn.list_tables()
             counts: dict[str, int] = {}
             for table in ["PRESCRIPTEUR", "PATIENT", "TRANSPORT"]:
@@ -399,6 +409,8 @@ if __name__ == "__main__":
         file=sys.stderr,
         flush=True,
     )
+    print(f"[sidecar] JAVA_HOME={os.environ.get('JAVA_HOME', '(non défini)')}", file=sys.stderr, flush=True)
+    print(f"[sidecar] lib_dir={_get_lib_dir()}", file=sys.stderr, flush=True)
     try:
         sys.exit(main())
     except Exception as e:

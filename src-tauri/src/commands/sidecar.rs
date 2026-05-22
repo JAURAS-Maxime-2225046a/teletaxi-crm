@@ -3,7 +3,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::queries;
-use crate::sidecar::process::{sidecar_call, sidecar_stream};
+use crate::sidecar::process::{detect_java_home, sidecar_call, sidecar_stream};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -114,12 +114,14 @@ pub async fn preview_excel(
     .await
 }
 
-/// Retourne le contenu du fichier sidecar.log pour affichage dans l'UI.
+/// Retourne le contenu de sidecar.log + infos de diagnostic pour l'UI.
 #[tauri::command]
 pub fn get_sidecar_log(app: AppHandle) -> Value {
     let log_dir = match app.path().app_log_dir() {
         Ok(d) => d,
-        Err(_) => return serde_json::json!({ "path": null, "content": "", "exists": false }),
+        Err(_) => return serde_json::json!({
+            "path": null, "content": "", "exists": false, "java_home": null
+        }),
     };
     let log_path = log_dir.join("sidecar.log");
     let exists = log_path.exists();
@@ -129,5 +131,11 @@ pub fn get_sidecar_log(app: AppHandle) -> Value {
     } else {
         String::new()
     };
-    serde_json::json!({ "path": path_str, "content": content, "exists": exists })
+    let java_home = detect_java_home(&app);
+    serde_json::json!({
+        "path": path_str,
+        "content": content,
+        "exists": exists,
+        "java_home": java_home,
+    })
 }
