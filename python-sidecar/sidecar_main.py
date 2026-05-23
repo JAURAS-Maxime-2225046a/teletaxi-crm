@@ -9,6 +9,7 @@ Stderr = logs internes (non parsés par Tauri).
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
@@ -16,6 +17,14 @@ import sys
 import traceback
 from pathlib import Path
 from typing import Any
+
+# Force UTF-8 sur stdout/stderr avant tout print/logging (Windows cp1252 fix)
+sys.stdout = io.TextIOWrapper(
+    sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True
+)
+sys.stderr = io.TextIOWrapper(
+    sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True
+)
 
 
 # ─── Résolution des chemins ──────────────────────────────────────────────────
@@ -229,6 +238,8 @@ def handle_preview_excel(request_id: str, params: dict) -> None:
         col_map = SCHEMAS.get(sheet_name)
 
         wb = openpyxl.load_workbook(excel_path, data_only=True, read_only=True)
+        print(f"[sidecar] sheets found: {[repr(s) for s in wb.sheetnames]}", flush=True, file=sys.stderr)
+        print(f"[sidecar] looking for: {repr(sheet_name)}", flush=True, file=sys.stderr)
         if sheet_name not in wb.sheetnames:
             wb.close()
             write_error(

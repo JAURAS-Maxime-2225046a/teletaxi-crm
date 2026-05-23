@@ -80,6 +80,8 @@ fn build_command(app: &AppHandle) -> Result<tauri_plugin_shell::process::Command
         .sidecar("teletaxi-import")
         .map_err(|e| format!("Sidecar non trouvé : {e}"))?;
 
+    cmd = cmd.env("PYTHONIOENCODING", "utf-8");
+
     if let Some(java_home) = detect_java_home(app) {
         cmd = cmd.env("JAVA_HOME", &java_home);
         // PATH enrichi pour que `java` soit accessible dans les PATH subs-processus
