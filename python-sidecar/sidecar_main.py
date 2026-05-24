@@ -18,7 +18,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-# Force UTF-8 sur stdout/stderr avant tout print/logging (Windows cp1252 fix)
+# Force UTF-8 sur stdin/stdout/stderr avant tout print/logging (Windows cp1252 fix)
+sys.stdin = io.TextIOWrapper(
+    sys.stdin.buffer, encoding='utf-8', errors='replace'
+)
 sys.stdout = io.TextIOWrapper(
     sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True
 )
